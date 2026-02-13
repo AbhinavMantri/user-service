@@ -1,7 +1,8 @@
-package com.example.user_service.models;
+package com.example.user_service.user.models;
 
 import java.time.LocalDateTime;
 
+import com.example.user_service.shared.models.BaseModel;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;

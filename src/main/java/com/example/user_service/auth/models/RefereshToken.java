@@ -1,7 +1,9 @@
-package com.example.user_service.models;
+package com.example.user_service.auth.models;
 
 import java.time.LocalDateTime;
 
+import com.example.user_service.shared.models.BaseModel;
+import com.example.user_service.user.models.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ForeignKey;
