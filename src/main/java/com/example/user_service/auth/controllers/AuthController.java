@@ -4,6 +4,7 @@ import com.example.user_service.auth.dtos.LoginRequest;
 import com.example.user_service.auth.dtos.LoginResponse;
 import com.example.user_service.auth.dtos.RegisterRequest;
 import com.example.user_service.auth.dtos.RegisterResponse;
+import com.example.user_service.auth.exceptions.UserAlreadyExistsException;
 import com.example.user_service.auth.models.UserSession;
 import com.example.user_service.auth.service.AuthService;
 import com.example.user_service.auth.exceptions.UserDisabledException;
@@ -50,13 +51,27 @@ public class AuthController {
                 response.setStatus(ResponseStatus.SUCCESS);
                 response.setMessage("User registered successfully");
                 response.setUserId(user.getId());
+                response.setEmail(user.getEmail());
+                response.setFullName(user.getFullName());
+                response.setPhone(user.getPhone());
                 log.info("{} success userId={} email={}", logGroup, user.getId(), user.getEmail());
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } catch (UserAlreadyExistsException e) {
+                response.setStatus(ResponseStatus.FAILURE);
+                response.setMessage(e.getMessage());
+                log.warn("{} duplicate email={} reason={}", logGroup, request.getEmail(), e.getMessage());
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+            } catch (IllegalArgumentException e) {
+                response.setStatus(ResponseStatus.FAILURE);
+                response.setMessage(e.getMessage());
+                log.warn("{} bad-request email={} reason={}", logGroup, request.getEmail(), e.getMessage());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
             } catch (Exception e) {
                 response.setStatus(ResponseStatus.FAILURE);
                 response.setMessage(e.getMessage());
                 log.warn("{} failure email={} reason={}", logGroup, request.getEmail(), e.getMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
             }
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } finally {
             MDC.remove(REQUEST_ID);
         }

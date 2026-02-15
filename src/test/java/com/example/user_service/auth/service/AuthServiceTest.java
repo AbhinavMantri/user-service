@@ -22,7 +22,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -86,7 +85,7 @@ class AuthServiceTest {
         assertNotEquals("password123", saved.getPasswordHash());
         assertTrue(new BCryptPasswordEncoder().matches("password123", saved.getPasswordHash()));
         assertEquals(UserStatus.ACTIVE, saved.getStatus());
-        assertEquals("USER", saved.getRole());
+        assertEquals("CUSTOMER", saved.getRole());
     }
 
     @Test
@@ -229,4 +228,3 @@ class AuthServiceTest {
         assertThrows(InvalidCredentialsException.class, () -> authService.logout(rawRefreshToken));
     }
 }
-

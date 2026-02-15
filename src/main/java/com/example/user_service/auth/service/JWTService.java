@@ -1,7 +1,9 @@
 package com.example.user_service.auth.service;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -59,6 +61,40 @@ public class JWTService {
         return unsignedToken + "." + signature;
     }
 
+    public Map<String, Object> validateAndExtractClaims(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length != 3) {
+                throw new IllegalArgumentException("Invalid JWT format");
+            }
+
+            String unsignedToken = parts[0] + "." + parts[1];
+            byte[] expectedSignature = hmacSha256(unsignedToken);
+            byte[] providedSignature = base64UrlDecode(parts[2]);
+            if (!MessageDigest.isEqual(expectedSignature, providedSignature)) {
+                throw new IllegalArgumentException("Invalid JWT signature");
+            }
+
+            String payloadJson = new String(base64UrlDecode(parts[1]), StandardCharsets.UTF_8);
+            Map<String, Object> claims = objectMapper.readValue(payloadJson, Map.class);
+
+            Object issuerClaim = claims.get("iss");
+            if (!(issuerClaim instanceof String issuerValue) || !issuer.equals(issuerValue)) {
+                throw new IllegalArgumentException("Invalid JWT issuer");
+            }
+
+            long now = Instant.now().getEpochSecond();
+            long exp = ((Number) claims.get("exp")).longValue();
+            if (exp < now) {
+                throw new IllegalArgumentException("JWT has expired");
+            }
+
+            return claims;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid JWT token", e);
+        }
+    }
+
     private String writeJson(Map<String, Object> value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -78,6 +114,10 @@ public class JWTService {
     }
 
     private String base64UrlEncode(byte[] value) {
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+    }
+
+    private byte[] base64UrlDecode(String value) {
+        return Base64.getUrlDecoder().decode(value);
     }
 }

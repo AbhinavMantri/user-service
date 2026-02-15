@@ -58,13 +58,13 @@ class AuthControllerTest {
     }
 
     @Test
-    void registerReturnsCreatedWithFailureWhenExceptionOccurs() {
+    void registerReturnsInternalServerErrorWhenUnexpectedExceptionOccurs() {
         RegisterRequest request = RegisterRequest.builder().build();
         when(authService.registerUser(request)).thenThrow(new RuntimeException("Registration failed"));
 
         ResponseEntity<RegisterResponse> response = authController.register(request);
 
-        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         assertEquals(ResponseStatus.FAILURE, response.getBody().getStatus());
         assertEquals("Registration failed", response.getBody().getMessage());
     }
