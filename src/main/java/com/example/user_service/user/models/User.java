@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class User extends BaseModel {
-        @Column(name = "email", nullable = false, unique = true, length = 254)
+        @Column(name = "email", nullable = false, unique = true, length = 320)
         private String email;
 
         @Column(name = "password_hash", nullable = false)
@@ -29,11 +29,11 @@ public class User extends BaseModel {
         @Column(name = "phone")
         private String phone;
 
-        @Column(name = "role")
+        @Column(name = "role", nullable = false, length = 32)
         private String role;
 
         @Enumerated(EnumType.STRING)
-        @Column(name = "status")
+        @Column(name = "status", nullable = false, length = 32)
         private UserStatus status;
 
         @CreationTimestamp
