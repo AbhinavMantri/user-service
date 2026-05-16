@@ -1,62 +1,58 @@
-# API Documentation
+# User Service API
 
-This document describes the currently implemented API surface of `user-service` based on the source code under `src/main/java`.
+Current HTTP contract for `user-service`.
 
-## Base URL
+Base path:
 
 ```text
 /user-service/v1
 ```
 
-The prefix comes from:
+## Conventions
 
-- `api.prefix=/user-service/v1`
-- `server.servlet.context-path=${api.prefix}`
+Public endpoints:
 
-## Authentication Rules
+```text
+/auth/**
+```
 
-- `/auth/**` endpoints are public.
-- `/users/**` requires a valid JWT access token.
-- `/admin/**` requires a valid JWT access token with `ROLE_ADMIN`.
-
-Protected endpoints expect:
+Protected user endpoints:
 
 ```http
-Authorization: Bearer <token>
+Authorization: Bearer <access-token>
 ```
 
-Access tokens are JWTs signed with HMAC-SHA256 and include:
+Admin endpoints require an access token with role `ADMIN`.
 
-- `iss`
-- `sub`
-- `email`
-- `role`
-- `iat`
-- `exp`
+Most responses use:
 
-Default token settings:
+- `status: SUCCESS`
+- `status: FAILURE`
 
-- access token TTL: `900` seconds
-- refresh token TTL: `7` days
+## JWT Access Token
 
-## Common Response Envelope
+Access tokens are signed with HMAC SHA-256 and include:
 
-Most endpoints return:
+| Claim | Meaning |
+| --- | --- |
+| `iss` | Issuer, default `user-service` |
+| `sub` | User id |
+| `email` | User email |
+| `role` | User role |
+| `iat` | Issued-at epoch seconds |
+| `exp` | Expiry epoch seconds |
 
-```json
-{
-  "status": "SUCCESS | FAILURE",
-  "message": "..."
-}
+Default TTL:
+
+```text
+900 seconds
 ```
 
-## Auth APIs
+## POST `/auth/register`
 
-### POST `/auth/register`
+Creates a new customer account.
 
-Creates a new user account.
-
-Request body:
+### Request
 
 ```json
 {
@@ -67,21 +63,16 @@ Request body:
 }
 ```
 
-Validation rules:
+### Validation
 
-- `email` is required and must be a valid email
-- `password` is required and must be 8 to 72 characters
-- `fullName` is optional, max 255 chars, allowed chars: letters, digits, space, `.`, `'`, `-`
-- `phone` is optional, max 20 chars, format: optional `+` followed by 7 to 15 digits
+- `email` is required and must be valid.
+- `password` is required and must be 8 to 72 characters.
+- `fullName` is optional, max 255 chars, and allows letters, digits, space, `.`, `'`, `-`.
+- `phone` is optional, max 20 chars, optional `+` followed by 7 to 15 digits.
 
-Behavior:
+### Success Response
 
-- email is normalized to lowercase and trimmed
-- role is set to `CUSTOMER`
-- status is set to `ACTIVE`
-- password is stored as a BCrypt hash
-
-Success response: `201 Created`
+`201 Created`
 
 ```json
 {
@@ -94,17 +85,24 @@ Success response: `201 Created`
 }
 ```
 
-Error cases:
+### Behavior Notes
 
-- `409 Conflict` if user already exists
-- `400 Bad Request` for illegal input handled by service
-- `500 Internal Server Error` for unexpected failures
+- Email is normalized to lowercase and trimmed.
+- Password is stored as BCrypt hash.
+- Role is set to `CUSTOMER`.
+- Status is set to `ACTIVE`.
 
-### POST `/auth/login`
+### Errors
 
-Authenticates a user and returns a session token pair.
+- `409 Conflict` if the user already exists.
+- `400 Bad Request` for illegal service-level input.
+- `500 Internal Server Error` for unexpected failures.
 
-Request body:
+## POST `/auth/login`
+
+Authenticates a user and returns access + refresh tokens.
+
+### Request
 
 ```json
 {
@@ -113,12 +111,9 @@ Request body:
 }
 ```
 
-Validation rules:
+### Success Response
 
-- `email` is required and must be valid
-- `password` is required and must be 8 to 72 characters
-
-Success response: `200 OK`
+`200 OK`
 
 ```json
 {
@@ -131,28 +126,30 @@ Success response: `200 OK`
 }
 ```
 
-Behavior:
+### Behavior Notes
 
-- disabled users cannot log in
-- login revokes existing active refresh tokens for that user
-- a new refresh token is created and stored as a hash
+- Disabled users cannot log in.
+- Existing active refresh tokens for the user are revoked when a new login session is created.
+- New refresh token is stored only as SHA-256 hash.
 
-Error cases:
+### Errors
 
-- `403 Forbidden` if the account is disabled
-- `401 Unauthorized` for invalid credentials and other auth failures
+- `403 Forbidden` if the account is disabled.
+- `401 Unauthorized` for invalid credentials.
 
-### POST `/auth/refresh`
+## POST `/auth/refresh`
 
-Returns a fresh access token for a valid refresh token.
+Issues a fresh access token from a valid refresh token.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <refresh token>
+Authorization: Bearer <refresh-token>
 ```
 
-Success response: `200 OK`
+### Success Response
+
+`200 OK`
 
 ```json
 {
@@ -165,57 +162,58 @@ Success response: `200 OK`
 }
 ```
 
-Behavior:
+### Behavior Notes
 
-- the refresh token is looked up by SHA-256 hash
-- expired refresh tokens are revoked immediately
-- disabled users cannot refresh
-- the existing refresh token is reused if still valid
+- Refresh token is looked up by SHA-256 hash.
+- Expired refresh tokens are revoked immediately.
+- Disabled users cannot refresh.
+- Current implementation reuses the same refresh token; it does not rotate refresh tokens on every refresh.
 
-Error cases:
+### Errors
 
-- `403 Forbidden` if the user is disabled
-- `401 Unauthorized` if the refresh token is invalid or expired
+- `403 Forbidden` if the user is disabled.
+- `401 Unauthorized` if the refresh token is invalid or expired.
 
-### POST `/auth/logout`
+## POST `/auth/logout`
 
 Revokes the refresh token associated with the current session.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <refresh token>
+Authorization: Bearer <refresh-token>
 ```
 
-Success response: `200 OK`
+### Success Response
+
+`200 OK`
 
 ```text
 Logged out successfully
 ```
 
-Important implementation note:
+### Behavior Notes
 
-- despite the controller parameter being named `accessToken`, the service actually expects a refresh token here
+- The service expects a refresh token, even though the controller parameter is named `accessToken`.
+- Logout currently returns plain text rather than the common JSON envelope.
 
-Error cases:
+### Errors
 
-- `401 Unauthorized` if the supplied token is invalid or already revoked
+- `401 Unauthorized` if the supplied refresh token is invalid or already revoked.
 
-## User APIs
-
-These endpoints require a valid JWT access token.
-
-### GET `/users/me`
+## GET `/users/me`
 
 Returns the authenticated user's profile.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <access token>
+Authorization: Bearer <access-token>
 ```
 
-Success response: `200 OK`
+### Success Response
+
+`200 OK`
 
 ```json
 {
@@ -230,21 +228,27 @@ Success response: `200 OK`
 }
 ```
 
-Error cases:
+### Behavior Notes
 
-- `404 Not Found` if the user referenced by the token email does not exist
+- Authenticated principal name is the email claim from the JWT.
+- User lookup is performed by email.
 
-### PATCH `/users/me`
+### Errors
+
+- `401 Unauthorized` for missing/invalid access token.
+- `404 Not Found` if the token email no longer maps to a user.
+
+## PATCH `/users/me`
 
 Updates the authenticated user's profile.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <access token>
+Authorization: Bearer <access-token>
 ```
 
-Request body:
+### Request
 
 ```json
 {
@@ -253,18 +257,15 @@ Request body:
 }
 ```
 
-Validation rules:
+### Validation
 
-- at least one of `name` or `phone` must be provided
-- `name` cannot be blank and max length is 255
-- `phone` cannot be blank and max length is 20
+- At least one of `name` or `phone` must be provided.
+- `name` cannot be blank and max length is 255.
+- `phone` cannot be blank and max length is 20.
 
-Behavior:
+### Success Response
 
-- only provided fields are updated
-- `name` maps to the persisted `fullName` field
-
-Success response: `200 OK`
+`200 OK`
 
 ```json
 {
@@ -279,35 +280,36 @@ Success response: `200 OK`
 }
 ```
 
-Error cases:
+### Behavior Notes
 
-- `404 Not Found` if the user does not exist
+- Only provided fields are updated.
+- Request field `name` maps to persisted `fullName`.
 
-## Admin APIs
-
-These endpoints require an access token for a user with role `ADMIN`.
-
-### GET `/admin/users`
+## GET `/admin/users`
 
 Returns a paginated list of users.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <admin access token>
+Authorization: Bearer <admin-access-token>
 ```
 
-Query parameters:
+### Query Params
 
-- `page` default `0`
-- `size` default `20`
-- `sortBy` default `createdAt`
-- `sortDir` default `desc`
-- `status` optional, one of `ACTIVE`, `DISABLED`
-- `role` optional, case-insensitive
-- `q` optional search string applied to `email`, `fullName`, and `phone`
+| Param | Default | Purpose |
+| --- | --- | --- |
+| `page` | `0` | Page number |
+| `size` | `20` | Page size |
+| `sortBy` | `createdAt` | Sort field |
+| `sortDir` | `desc` | `asc` or `desc` |
+| `status` | none | Optional `ACTIVE` or `DISABLED` |
+| `role` | none | Optional role filter |
+| `q` | none | Search across email, full name, and phone |
 
-Success response: `200 OK`
+### Success Response
+
+`200 OK`
 
 ```json
 {
@@ -332,25 +334,17 @@ Success response: `200 OK`
 }
 ```
 
-Error cases:
+## PATCH `/admin/users/{id}/status`
 
-- `400 Bad Request` for invalid pageable or filter inputs
+Updates a user's account status.
 
-### PATCH `/admin/users/{id}/status`
-
-Updates a user's status.
-
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <admin access token>
+Authorization: Bearer <admin-access-token>
 ```
 
-Path parameter:
-
-- `id`: user UUID
-
-Request body:
+### Request
 
 ```json
 {
@@ -358,7 +352,9 @@ Request body:
 }
 ```
 
-Success response: `200 OK`
+### Success Response
+
+`200 OK`
 
 ```json
 {
@@ -370,33 +366,26 @@ Success response: `200 OK`
     "fullName": "Alice Doe",
     "phone": "+919999999999",
     "role": "CUSTOMER",
-    "status": "DISABLED",
-    "createdAt": "2026-04-12T08:00:00",
-    "updatedAt": "2026-04-12T08:05:00"
+    "status": "DISABLED"
   }
 }
 ```
 
-Error cases:
+### Behavior Notes
 
-- `400 Bad Request` for invalid UUIDs or invalid request values
-- `500 Internal Server Error` for other failures
+- Disabled users cannot log in or refresh access tokens.
 
-### PATCH `/admin/users/{id}/role`
+## PATCH `/admin/users/{id}/role`
 
-Updates a user's role.
+Updates a user's platform role.
 
-Headers:
+### Headers
 
 ```http
-Authorization: Bearer <admin access token>
+Authorization: Bearer <admin-access-token>
 ```
 
-Path parameter:
-
-- `id`: user UUID
-
-Request body:
+### Request
 
 ```json
 {
@@ -404,16 +393,9 @@ Request body:
 }
 ```
 
-Behavior:
+### Success Response
 
-- role is trimmed and uppercased before persistence
-- the service does not validate the role itself, but the database check constraint allows only:
-  - `CUSTOMER`
-  - `ORGANIZER`
-  - `ADMIN`
-  - `GATE_AGENT`
-
-Success response: `200 OK`
+`200 OK`
 
 ```json
 {
@@ -425,33 +407,30 @@ Success response: `200 OK`
     "fullName": "Alice Doe",
     "phone": "+919999999999",
     "role": "ORGANIZER",
-    "status": "ACTIVE",
-    "createdAt": "2026-04-12T08:00:00",
-    "updatedAt": "2026-04-12T08:05:00"
+    "status": "ACTIVE"
   }
 }
 ```
 
-Error cases:
+### Behavior Notes
 
-- `400 Bad Request` for invalid UUIDs or blank role
-- `500 Internal Server Error` for downstream persistence failures such as DB role constraint violations
+- Role is trimmed and uppercased before persistence.
+- Service-level validation does not restrict role values yet.
+- Database constraint allows only `CUSTOMER`, `ORGANIZER`, `ADMIN`, and `GATE_AGENT`.
 
 ## Persistence Notes
 
-Tables created by [scripts/db.sql](/d:/Scaler-Projects/user-service/scripts/db.sql):
+Tables:
 
 - `users`
 - `refresh_tokens`
 
-The SQL script:
+Refresh tokens are stored as hashes, not raw token values.
 
-- enables `pgcrypto`
-- creates indexes for user lookup and refresh-token lookup
-- inserts a default admin user: `admin@capstone.com`
+## Common Errors
 
-## Known Implementation Details
-
-- `UserProfile` responses expose `fullName`, while the update request field is named `name`.
-- `GET /users/me` calls `getUserProfile(email, null, null)`; the extra unused parameters are currently harmless but not used.
-- logout returns plain text instead of the common JSON envelope.
+- `400 Bad Request` for invalid request values.
+- `401 Unauthorized` for missing/invalid tokens.
+- `403 Forbidden` for disabled account login/refresh or non-admin access to admin APIs.
+- `404 Not Found` for missing authenticated user profile.
+- `409 Conflict` for duplicate registration.
